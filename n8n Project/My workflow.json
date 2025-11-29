@@ -1,0 +1,1521 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        48,
+        32
+      ],
+      "id": "f950e0a0-d3f2-4d52-bf19-a4363d209ff5",
+      "name": "Telegram Trigger",
+      "webhookId": "74fca0ff-b991-49be-b563-f7f4b262a43a",
+      "credentials": {
+        "telegramApi": {
+          "id": "KNg1Uzvo3Uhppjb2",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "25307583-b129-48ee-8503-7d3242e8206c",
+              "name": "message.text",
+              "value": "={{ $('Telegram Trigger').item.json.message.text }}",
+              "type": "string"
+            },
+            {
+              "id": "3f2ff47f-d561-48d5-8269-fd27a3026c54",
+              "name": "message.chat.id",
+              "value": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+              "type": "number"
+            },
+            {
+              "id": "314d4b9d-7cef-42ed-a245-2dc21682feb9",
+              "name": "message.from.first_name",
+              "value": "={{ $('Telegram Trigger').item.json.message.from.first_name }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        976,
+        0
+      ],
+      "id": "5d11745f-13c8-44d9-aabe-6780749d8633",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY",
+          "mode": "list",
+          "cachedResultName": "Ai memory - n8n",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        3824,
+        96
+      ],
+      "id": "b8a15001-351e-4c47-b053-0bbf79314ab7",
+      "name": "Get row(s) in sheet",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "7ur9DLWrI1628OQW",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Step 1: Clean ```json and ``` wrapping\nlet raw = $input.first().json.message.content;\nraw = raw.replace(/```json\\n?/, \"\").replace(/```$/, \"\").trim();\n\n// Step 2: Parse the JSON string\nconst parsed = JSON.parse(raw);\n\n// Step 3: Get trigger message date in YYYY-MM-DD format\nconst triggerDate = new Date($('Telegram Trigger').item.json.message.date * 1000)\n  .toISOString()\n  .split('T')[0];\n\n// Step 4: Get first name of sender from Telegram Trigger\nconst senderName = $('Telegram Trigger').item.json.message.from.first_name || \"Maaz\";\n\n// Step 5: Forward parsed values + trigger date + fallback to sender name if person is missing\nreturn [{\n  json: {\n    dates: parsed.dates,\n    note: parsed.note,\n    person: parsed.person, // fallback if not explicitly mentioned\n    status: parsed.status || \"pending\",\n    query_type: parsed.query_type,\n    chat_id: $json[\"chat_id\"],\n    trigger_date: triggerDate,\n    senderName: $('Telegram Trigger').first().json.message.chat.first_name\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3200,
+        96
+      ],
+      "id": "568e0faa-0a61-4813-b979-86a2e596f958",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get parsed GPT output\nconst gptOutput = $('Code').first().json;\n\n// Extract trigger date as a separate variable\nconst triggerDate = gptOutput.trigger_date || null;\n\n// Prepare filtering parameters\nconst allowedDates = (gptOutput.dates || []).map(d => d.trim());\nconst requiredStatus = (gptOutput.status || \"pending\").toLowerCase().trim();\nconst requiredPerson = (gptOutput.person || \"\").toLowerCase().trim();\n\n// Filter rows\nconst filteredItems = items.filter(item => {\n  const rowDate = (item.json[\"Date\"] || \"\").trim();\n  const rowStatus = (item.json[\"Status\"] || \"\").toLowerCase().trim();\n  const rowPerson = (item.json[\"Assigned Person\"] || \"\").toLowerCase().trim();\n\n  const isDateMatch = allowedDates.includes(rowDate);\n  const isStatusMatch = rowStatus === requiredStatus;\n  const isPersonMatch = !requiredPerson || rowPerson === requiredPerson;\n\n  return isDateMatch && isStatusMatch && isPersonMatch;\n});\n\n// Prepare output: filtered items + separate trigger date object\nconst result = filteredItems.map(item => ({ json: item.json }));\n\n// Append trigger_date as a separate item\nresult.push({\n  json: {\n    trigger_date: triggerDate\n  }\n});\n\nreturn result;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4032,
+        96
+      ],
+      "id": "cac8b34f-dc21-40bb-8e7a-8a9822564505",
+      "name": "Code1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const chatId = $('Edit Fields').first().json.message.chat.id;\n\n// Filter out rows that have neither a date nor a task note\nconst validItems = $input.all().filter(item => {\n  const note = item.json[\"Task/Note\"];\n  const date = item.json[\"Date\"];\n  return note || date; // keep only if at least one is present\n});\n\n// If no valid tasks, reply with fallback message\nif (validItems.length === 0) {\n  return [{\n    json: {\n      chat_id: chatId,\n      reply: `No tasks found.`\n    }\n  }];\n}\n\n// Format valid tasks\nconst tasks = validItems.map((item, index) => {\n  const task = item.json[\"Task/Note\"] || \"No task details\";\n  const date = item.json[\"Date\"] || \"No date\";\n  return `Task ${index + 1}:\\nDate: ${date}\\nDetails: ${task}`;\n});\n\n// Compose final reply\nconst reply = `-----------------\\n${tasks.join(\"\\n\\n\")}\\n-----------------`;\n\n// Find first trigger_date if any\nconst triggerItem = $input.all().find(i => i.json.trigger_date);\nconst triggerDate = triggerItem?.json.trigger_date || null;\n\nreturn [{\n  json: {\n    chat_id: chatId,\n    reply: reply,\n    trigger_date: triggerDate\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4240,
+        96
+      ],
+      "id": "90bb285c-f61b-49cc-b527-53f0f2cc5ed4",
+      "name": "Code2"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.reply }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        4480,
+        96
+      ],
+      "id": "5a32d171-acbb-41a8-8676-c4788ba18c4f",
+      "name": "Send a text message",
+      "webhookId": "9953da80-53f9-4b29-8af4-5663055826a1",
+      "credentials": {
+        "telegramApi": {
+          "id": "KNg1Uzvo3Uhppjb2",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Step 1: Extract raw content from the OpenAI Message model\nlet raw = $input.first().json.message.content;\n\n// Step 2: Remove ```json and ``` wrapping\nraw = raw.replace(/```json\\n?/, \"\").replace(/```$/, \"\").trim();\n\n// Step 3: Parse JSON\nconst parsed = JSON.parse(raw);\n\n// Step 4: Return desired fields\nreturn [{\n  json: {\n    assignee: parsed.assignee,\n    summary: parsed.summary,\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3280,
+        -128
+      ],
+      "id": "d983c509-04ab-497d-b13f-17472963b3f8",
+      "name": "Code3"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY",
+          "mode": "list",
+          "cachedResultName": "Ai memory - n8n",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Date": "={{ new Date($('Telegram Trigger').item.json.message.date * 1000).toISOString().split('T')[0] }}",
+            "Telegram User ID": "={{ $('Telegram Trigger').item.json.message.from.first_name }} {{ $('Telegram Trigger').item.json.message.from.last_name }}",
+            "Task/Note": "={{ $json.summary }}",
+            "Assigned Person": "={{ $json.assignee }}",
+            "Platform (Telegram)": "Telegram",
+            "Status": "Pending"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Telegram User ID",
+              "displayName": "Telegram User ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Task/Note",
+              "displayName": "Task/Note",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Assigned Person",
+              "displayName": "Assigned Person",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Platform (Telegram)",
+              "displayName": "Platform (Telegram)",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        3488,
+        -128
+      ],
+      "id": "3f9f9967-426e-48ea-8e36-fc9502e77cbd",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "7ur9DLWrI1628OQW",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "=The following task was added:\n{{ $('Code3').item.json.summary }}\n\nAnd Assigned to:\n{{ $('Code3').item.json.assignee }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3680,
+        -144
+      ],
+      "id": "be9b3215-6226-46db-9180-c26f763a7106",
+      "name": "Send a text message1",
+      "webhookId": "bb06fc40-8034-44ac-b90b-6c6b238b88a1",
+      "credentials": {
+        "telegramApi": {
+          "id": "KNg1Uzvo3Uhppjb2",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Message a model2').item.json.message.content }}",
+                    "rightValue": "=task",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "bea5bc9c-48c8-4559-a566-b1b60d3d9704"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "4bbb6d95-62b6-40d7-a994-04d2d97c9006",
+                    "leftValue": "={{ $('Message a model2').item.json.message.content }}",
+                    "rightValue": "query",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "3be4d6c6-8733-4844-8faf-2b8bbd26f19d",
+                    "leftValue": "={{ $('Message a model2').item.json.message.content }}",
+                    "rightValue": "chatgpt",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "e80e0ada-cee0-4bec-a705-6887c49edfc2",
+                    "leftValue": "={{ $('Message a model2').item.json.message.content }}",
+                    "rightValue": "greetings",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1184,
+        -16
+      ],
+      "id": "688f4a46-36c3-42f2-b334-35af41aaa7b9",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.message.chat.id }}",
+        "text": "=👋 Hi there! I'm your task assistant.\nYou can send me tasks like: ➡️ \"Ali needs to fix the AC tomorrow\"\nOr ask things like: ➡️ \"What are Maaz's tasks from Monday?\"\nLet’s get things done! ✅",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1632,
+        416
+      ],
+      "id": "82f242bf-381c-4a23-9b4a-7def9f35193f",
+      "name": "Send a text message3",
+      "webhookId": "9709729c-6155-4145-af84-eeb239890c2a",
+      "credentials": {
+        "telegramApi": {
+          "id": "KNg1Uzvo3Uhppjb2",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "GPT-4O"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Today is {{ $now.toISODate() }}.\n\nFrom the message below, extract the following fields and return a valid JSON object:\n\n\"dates\": an array of dates in YYYY-MM-DD format\n\n\"note\": a short plain-text summary of what the user is asking\n\n\"person\": name of the person whose tasks are being asked about (default to the sender: {{ $json.message.from.first_name }} if not mentioned)\n\n\"status\": \"pending\" or \"completed\" depending on the user's message (default to \"pending\")\n\n\"query_type\":\n\n\"fetching related\": if the user is clearly asking to view, list, or retrieve tasks for a specific date, status, or person\n\n\"task follow-up\": if the user is referring to a previously mentioned task, asking to explain, update, or clarify a specific task (e.g., “explain task 3”, “what about task 2”, “give more info on the previous one”)\n\n📌 Interpretation Rules:\n\n\"This week\" → return all dates from Monday to today\n\n\"Today\" → return today’s date\n\n\"Monday\" (or any weekday) → return that day for this week\n\n\"From Monday\" → return all dates from that weekday to today\n\nIf no clear date is mentioned but the message asks to view tasks, assume date range is Monday to today\n\nIf no person is clearly named, default to the sender ({{ $json.message.from.first_name }})\n\nIf no status is mentioned, default to \"pending\"\n\n📎 Additional Rules for query_type:\n\nIf the message includes references like “task 1”, “task 3”, “last task”, “previous one”, or “explain that”, set \"query_type\" to \"task follow-up\"\n\nAvoid marking such clarification requests as \"fetching related\"\n\nOnly set \"fetching related\" when the user is asking for new or filtered task views\n\n❌ Respond only with a valid JSON object — no extra text, explanation, or markdown.\n\nMessage: {{ $json.message.text }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        2400,
+        112
+      ],
+      "id": "d956c723-bb2c-48e0-9fd3-4cc20e73f54c",
+      "name": "Message a model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "vyt5kHo1o7TsNBD1",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "596b83fd-f1d5-40ea-9a71-0c141db6440d",
+              "leftValue": "={{ $json.query_type }}",
+              "rightValue": "fetching related",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3568,
+        192
+      ],
+      "id": "1214f8a9-42db-40f2-b67f-2ee6e60c7ec5",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY",
+          "mode": "list",
+          "cachedResultName": "Ai memory - n8n",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 968632790,
+          "mode": "list",
+          "cachedResultName": "Chat History",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY/edit#gid=968632790"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "chat id",
+              "lookupValue": "={{ $('Switch').item.json.message.chat.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        3840,
+        320
+      ],
+      "id": "7ff1dec3-a64a-483c-b882-d8da8dc3457c",
+      "name": "Get row(s) in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "7ur9DLWrI1628OQW",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "GPT-4O"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a task assistant. You are given saved context containing structured task assignments. Your job is to extract answers strictly from the saved context — do not generate or infer new content.\n\n📜 SAVED CONTEXT:\n\n{{ $json.context }}\n🔍 USER QUESTION:\n{{ $json.query }}\n\n🎯 Your Instructions:\n\nFrom the user's question, extract:\n\nThe task number, which may be written in any of the following formats:\n\nDigit (e.g. task 1, task 2)\n\nOrdinal word (e.g. first, second, third, ...)\n\nOrdinal number (e.g. 1st, 2nd, 3rd, ...)\n→ Convert all formats to a number (e.g. first, 1st, and 1 all become 1)\n\nThe person's name (e.g., Hashim, Arif)\n→ If no name is mentioned, use the default name: {{ $json.sender }}\n\nSearch the saved context for a line that matches this pattern exactly:\nTask <number> for <person> is to ...\n\nIf a matching line is found, return it exactly as written.\n\nIf no match is found, return:\n“Sorry, I couldn't find that task in the saved context.”\n\n⚠️ Important Rules:\n\nDo not guess or invent task content."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        4352,
+        336
+      ],
+      "id": "3453a023-221a-416f-986f-2e0d26d5d3fc",
+      "name": "Message a model",
+      "credentials": {
+        "openAiApi": {
+          "id": "vyt5kHo1o7TsNBD1",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine all 'messages' fields from the sheet rows\nconst contextMessages = items\n  .map(item => item.json.messages)\n  .join('\\n\\n'); // separate each message block with double newline\n\n// Extract query and chat ID from Telegram Trigger\nconst query = $('Telegram Trigger').item.json.message.text;\nconst chatId = $('Telegram Trigger').item.json.message.chat.id;\n\nreturn [\n  {\n    json: {\n      context: contextMessages,\n      query: query,\n      chat_id: chatId,\n      sender: $('Code').first().json.senderName\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4080,
+        336
+      ],
+      "id": "1e181f45-09a7-407f-8a92-a35b411340c6",
+      "name": "Code4"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Code4').item.json.chat_id }}",
+        "text": "={{ $json.message.content }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        4800,
+        320
+      ],
+      "id": "49b52f4c-709f-45fa-84cd-f5b94f4490da",
+      "name": "Send a text message4",
+      "webhookId": "bb294cd3-ecca-460c-ba1a-990660c6c981",
+      "credentials": {
+        "telegramApi": {
+          "id": "KNg1Uzvo3Uhppjb2",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const userMessage = $('Edit Fields').first().json.message.text;\nconst triggerDate = $('Code2').first().json.trigger_date || null;\n\n// Get raw task text\nconst inputText = $input.first().json.result.text || \"\";\n\n// Properly extract only valid Task blocks (ignore garbage before Task 1)\nconst taskBlocks = inputText\n  .split(/Task \\d+:/)\n  .map(t => t.trim())\n  .filter(t => t.includes(\"Date:\") || t.includes(\"Details:\")); // ensure it's a task\n\n// If no tasks found\nif (taskBlocks.length === 0) {\n  return [{\n    json: {\n      reply: `-----------------\\nUser Question: ${userMessage}\\n\\nAI Answer:\\n\\nNo tasks found.\\n-----------------`,\n      trigger_date: triggerDate\n    }\n  }];\n}\n\n// Parse and format tasks\nconst tasks = taskBlocks.map((block, index) => {\n  const dateMatch = block.match(/Date:\\s*([^\\n]+)/);\n  const detailsMatch = block.match(/Details:\\s*([^\\n]+)/);\n\n  const date = dateMatch ? dateMatch[1].trim() : \"No date\";\n  const details = detailsMatch ? detailsMatch[1].trim() : \"No task details\";\n\n  return `Task ${index + 1}:\\nDate: ${date}\\nDetails: ${details}`;\n});\n\n// Final reply\nconst fullReply = `-----------------\\nUser Question: ${userMessage}\\n\\nAI Answer:\\n\\n${tasks.join(\"\\n\\n\")}\\n-----------------`;\n\nreturn [{\n  json: {\n    reply: fullReply,\n    trigger_date: triggerDate\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4688,
+        96
+      ],
+      "id": "a09468a7-b846-4c84-92d0-30f0605d61bd",
+      "name": "Code5"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY",
+          "mode": "list",
+          "cachedResultName": "Ai memory - n8n",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 968632790,
+          "mode": "list",
+          "cachedResultName": "Chat History",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY/edit#gid=968632790"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "chat id": "={{ $('Send a text message').item.json.result.chat.id }}",
+            "messages": "={{ $json.message.content }}",
+            "Date": "={{ $('Code5').item.json.trigger_date }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "chat id",
+              "displayName": "chat id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "messages",
+              "displayName": "messages",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        5264,
+        144
+      ],
+      "id": "c863ff7d-5b34-41fc-bc2e-a3fcf3edb8e8",
+      "name": "Append row in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "7ur9DLWrI1628OQW",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY",
+          "mode": "list",
+          "cachedResultName": "Ai memory - n8n",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 968632790,
+          "mode": "list",
+          "cachedResultName": "Chat History",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY/edit#gid=968632790"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        5488,
+        112
+      ],
+      "id": "7fc46285-59f3-4158-a228-b5db4209996e",
+      "name": "Get row(s) in sheet2",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "7ur9DLWrI1628OQW",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const today = new Date();\nconst dayOfWeek = today.getDay(); // Sunday = 0, Monday = 1, ..., Saturday = 6\nconst diffToMonday = (dayOfWeek + 6) % 7;\nconst thisMonday = new Date(today);\nthisMonday.setDate(today.getDate() - diffToMonday);\nconst thisMondayStr = thisMonday.toISOString().split('T')[0];\n\nreturn items\n  .map((item, index) => {\n    return {\n      json: {\n        ...item.json,\n        rowNumber: index + 2, // +2 because row 1 is header\n      }\n    };\n  })\n  .filter(item => {\n    const rowDate = item.json.Date;\n    return rowDate < thisMondayStr;\n  });\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5712,
+        112
+      ],
+      "id": "3730192d-289c-40cf-ba78-277a3f44c132",
+      "name": "Code7"
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "documentId": {
+          "__rl": true,
+          "value": "1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY",
+          "mode": "list",
+          "cachedResultName": "Ai memory - n8n",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 968632790,
+          "mode": "list",
+          "cachedResultName": "Chat History",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY/edit#gid=968632790"
+        },
+        "startIndex": "={{ $json.rowNumber }}\n"
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        5904,
+        96
+      ],
+      "id": "7adf7064-9261-463b-8f11-afe8f7d39766",
+      "name": "Delete rows or columns from sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "7ur9DLWrI1628OQW",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "GPT-4O"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a task assistant. Classify the user's message into one of the following categories:\n\nRespond with only one word — no punctuation, no explanations.\n\nCategories:\ntask → The message clearly describes or assigns a tracked, real-world to-do item (not a creative or writing request).\n✅ Examples:\n“Ali needs to fix the lights”\n“Submit the report by Friday”\n“Call the client”\n“Schedule meeting with Maaz”\n“Send email to Hashim about pricing”\n\nquery → The message asks about task details, statuses, deadlines, or assignments.\n✅ Examples:\n“What are my tasks?”\n“Who is assigned to task 3?”\n“Explain task 2”\n“Is the report done?”\n\nchatgpt → The message asks for help with writing, content generation, advice, or general questions not related to status or assignment of tasks.\n✅ Examples:\n“Write a letter to a client”\n“Can you write a message to Maaz for me?”\n“Help me write a reply”\n“What is AI?”\n“How do I write a resignation email?”\n“What are some ideas for the event?”\n\ngreetings → The message is just a greeting or pleasantry.\n✅ Examples:\n“Hi”\n“Hello”\n“/start”\n“Good morning”\n\nStrict Rules:\nIf it's a work-related instruction or assignment = task\n\nIf it’s asking about a known task = query\n\nIf it’s asking for writing help, explanation, or creative input = chatgpt\n\nIf it’s just a greeting = greetings\n\nClassify this message:\n“{{ $json.message.text }}”\n\nRespond strictly with:\ntask, query, chatgpt, or greetings"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        368,
+        0
+      ],
+      "id": "699e5ff3-c455-450f-a058-0daed7a159bc",
+      "name": "Message a model2",
+      "credentials": {
+        "openAiApi": {
+          "id": "vyt5kHo1o7TsNBD1",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "GPT-4O"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a task assistant.\n\nFrom the message below, extract and return the following as valid JSON:\n\n{\n  \"assignee\": \"<Name of the person assigned to the task>\",\n  \"summary\": \"<A simple 1-line summary of the task>\"\n}\nInstructions:\n\nIf the message explicitly mentions a person's name (e.g. john,sara etc), set \"assignee\" to that name.\n\nIf no name is mentioned, set \"assignee\" to the sender's first name: {{ $json.message.from.first_name }}\n\nThe \"summary\" should be a clean, short description of the task (without the name).\n\nDo not include extra commentary, Markdown, or code formatting. Respond with raw JSON only.\n\nMessage:\n\"{{ $('Telegram Trigger').item.json.message.text }}\"\n\nYour output must be strictly formatted like this:\n\n{\n  \"assignee\": \"John\",\n  \"summary\": \"Meet with sara\"\n}\nOr, if the message doesn’t mention a name:\n\n{\n  \"assignee\": \"{{ $json.message.from.first_name }}\",\n  \"summary\": \"Submit the report\"\n}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        2400,
+        -144
+      ],
+      "id": "500506a9-3c6d-411a-9390-0a11a9112299",
+      "name": "Message a model4",
+      "credentials": {
+        "openAiApi": {
+          "id": "vyt5kHo1o7TsNBD1",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "GPT-4O"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a helpful assistant. Use the context of the previous conversation to answer the following query in a concise, brief, formal, and professional manner.\n\nIf the context contains relevant information, answer based strictly on that. If not, answer normally.\n\nContext:\n{{ $json.context }}\n\nQuery:\n{{ $('Telegram Trigger').first().json.message.text }}\n"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        3424,
+        368
+      ],
+      "id": "76a8b07b-f18f-43fc-9669-5f8d68630724",
+      "name": "Message a model3",
+      "credentials": {
+        "openAiApi": {
+          "id": "vyt5kHo1o7TsNBD1",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-3.5-turbo",
+          "mode": "list",
+          "cachedResultName": "GPT-3.5-TURBO"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a helpful assistant.\n\nYour goal is to summarize the following reply into a clean, structured context for future use by an AI.\nPlease follow this exact format for the output:\n\nTask 1 for [Assigned Person] is to [task detail] on [date].\nTask 2 for [Assigned Person] is to [task detail] on [date].\n...\n\nUse the text provided below to extract tasks and rewrite them in this format:\n\nbash\nCopy\nEdit\n{{ $json.reply }}\nNotes:\n\nAlways keep the structure consistent.\n\nDo not include any extra text or explanations.\n\nIf a task has no assigned person,use \"{{ $('Send a text message').item.json.result.chat.first_name }}\"."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        4912,
+        96
+      ],
+      "id": "67bb59e0-2600-4f2c-a2d8-d6002c6c0946",
+      "name": "Message a model5",
+      "credentials": {
+        "openAiApi": {
+          "id": "vyt5kHo1o7TsNBD1",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY",
+          "mode": "list",
+          "cachedResultName": "Ai memory - n8n",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 616559348,
+          "mode": "list",
+          "cachedResultName": "ChatGpt History",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY/edit#gid=616559348"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Chat id",
+              "lookupValue": "={{ $json.message.chat.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        1584,
+        128
+      ],
+      "id": "f61cdc82-bd8b-40eb-89e2-0e4d59937146",
+      "name": "Get row(s) in sheet3",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "7ur9DLWrI1628OQW",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get chat ID from Telegram Trigger node\nconst chatId = $('Telegram Trigger').first().json.message.chat.id;\n\n// Add row numbers starting from 2 (because row 1 is header)\nconst withRowNumbers = items.map((item, index) => ({\n  json: {\n    ...item.json,\n    rowNumber: index + 2,\n    chat_id: chatId\n  }\n}));\n\n// Keep all except the last 10 rows\nconst rowsToDelete = withRowNumbers.slice(0, Math.max(0, withRowNumbers.length - 10));\n\n// If no rows to delete, return a dummy object to keep workflow running\nif (rowsToDelete.length === 0) {\n  return [{\n    json: {\n      skipDelete: true,\n      chat_id: chatId\n    }\n  }];\n}\n\nreturn rowsToDelete;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1824,
+        224
+      ],
+      "id": "1c8b59e9-3c35-48c5-8ffe-f0981f2434c8",
+      "name": "Code6"
+    },
+    {
+      "parameters": {
+        "jsCode": "const userQuery = $('Telegram Trigger').first().json.message.text;\nconst aiResponse = $('Message a model3').first().json.message.content;\n\nconst combined = `------------------------------------\\n` +\n                 `user Query: ${userQuery}\\n\\n` +\n                 `Ai responce: ${aiResponse}\\n` +\n                 `------------------------------------`;\n\nreturn [{\n  json: {\n    combined\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4272,
+        528
+      ],
+      "id": "a155e34d-4124-49e6-adcd-7dd099f20e57",
+      "name": "Code8"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').first().json.message.chat.id }}\n",
+        "text": "={{ $json.message.content }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3936,
+        512
+      ],
+      "id": "180dcc2f-a8b0-478b-a610-7b4e84150cd3",
+      "name": "Send a text message2",
+      "webhookId": "c0c10503-995e-4fcb-aae4-da9307834781",
+      "credentials": {
+        "telegramApi": {
+          "id": "KNg1Uzvo3Uhppjb2",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "documentId": {
+          "__rl": true,
+          "value": "1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY",
+          "mode": "list",
+          "cachedResultName": "Ai memory - n8n",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 616559348,
+          "mode": "list",
+          "cachedResultName": "ChatGpt History",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY/edit#gid=616559348"
+        },
+        "startIndex": "={{ $json.rowNumber }}"
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        2128,
+        224
+      ],
+      "id": "84cc01ba-1dee-416e-8e4e-c7cdcbe46c01",
+      "name": "Delete rows or columns from sheet2",
+      "executeOnce": false,
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "7ur9DLWrI1628OQW",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract and clean all Chat values\nconst chatValues = items\n  .map(item => item.json.Chat || \"\")\n  .filter(value => value.trim() !== \"\");\n\n// Prepare the context variable\nconst context = chatValues.length > 0\n  ? chatValues.join('\\n')\n  : \"No context\";  // Fallback string if no valid Chat rows\n\n// Always return one item with context\nreturn [{\n  json: {\n    context\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2960,
+        320
+      ],
+      "id": "725ef268-7c73-4ade-b445-1813730e2e5a",
+      "name": "Code9"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY",
+          "mode": "list",
+          "cachedResultName": "Ai memory - n8n",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 616559348,
+          "mode": "list",
+          "cachedResultName": "ChatGpt History",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY/edit#gid=616559348"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Chat id",
+              "lookupValue": "={{ $('Telegram Trigger').first().json.message.chat.id.toString() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        2512,
+        304
+      ],
+      "id": "f34d833a-fc0b-4167-afee-1389787ed77d",
+      "name": "Get row(s) in sheet4",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "7ur9DLWrI1628OQW",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY",
+          "mode": "list",
+          "cachedResultName": "Ai memory - n8n",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 616559348,
+          "mode": "list",
+          "cachedResultName": "ChatGpt History",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1lCh7MM-WEjgz4bCdQ7ujAHSyWGDBJXGYf5Ea80KhytY/edit#gid=616559348"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Chat id": "={{ $('Telegram Trigger').first().json.message.chat.id }}",
+            "Chat": "={{ $json.combined }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Chat id",
+              "displayName": "Chat id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Chat",
+              "displayName": "Chat",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        4480,
+        528
+      ],
+      "id": "1df365fc-2a81-43d7-b79b-8e669c74c0d9",
+      "name": "Append row in sheet2",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "7ur9DLWrI1628OQW",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Message a model2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code1": {
+      "main": [
+        [
+          {
+            "node": "Code2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code2": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code3": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Send a text message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Message a model4",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Message a model1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get row(s) in sheet3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a text message3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message": {
+      "main": [
+        [
+          {
+            "node": "Code5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model1": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get row(s) in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet1": {
+      "main": [
+        [
+          {
+            "node": "Code4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code4": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Send a text message4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code5": {
+      "main": [
+        [
+          {
+            "node": "Message a model5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message4": {
+      "main": [
+        []
+      ]
+    },
+    "Append row in sheet1": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet2": {
+      "main": [
+        [
+          {
+            "node": "Code7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code7": {
+      "main": [
+        [
+          {
+            "node": "Delete rows or columns from sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model2": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model4": {
+      "main": [
+        [
+          {
+            "node": "Code3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model3": {
+      "main": [
+        [
+          {
+            "node": "Send a text message2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model5": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet3": {
+      "main": [
+        [
+          {
+            "node": "Code6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code6": {
+      "main": [
+        [
+          {
+            "node": "Delete rows or columns from sheet2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code8": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message2": {
+      "main": [
+        [
+          {
+            "node": "Code8",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete rows or columns from sheet2": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code9": {
+      "main": [
+        [
+          {
+            "node": "Message a model3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet4": {
+      "main": [
+        [
+          {
+            "node": "Code9",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "10992c9c-e4dc-4c67-b6e9-1d0036ca3da8",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "9d93e1ffa15b576f710104e59447b26cd2600c7789048db73095dfaae69336db"
+  },
+  "id": "jXDXHoSEN1UqfIBm",
+  "tags": []
+}
